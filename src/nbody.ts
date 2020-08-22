@@ -18,13 +18,17 @@ import {
   SphereBufferGeometry,
   LineSegments,
   LineBasicMaterial,
-  UVMapping
+  UVMapping,
+  Line,
+  Points
 } from 'three';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 import mainVertexShader from './shaders/main.vert';
 import mainFragmentShader from './shaders/main.frag';
+import trailsVertexShader from './shaders/trails.vert';
+import trailsFragmentShader from './shaders/trails.frag';
 import passThroughVertexShader from './shaders/pass-through.vert';
 import passThroughFragmentShader from './shaders/pass-through.frag';
 import positionFragmentShader from './shaders/position.frag';
@@ -38,12 +42,22 @@ interface ISubScene {
   prev?: WebGLRenderTarget;
 }
 
+interface IPositionSubScene {
+  scene?: Scene;
+  mesh?: Mesh<BufferGeometry, Material>;
+  material?: ShaderMaterial;
+  slices?: WebGLRenderTarget[];
+}
+
 interface IMainScene {
   camera?: PerspectiveCamera;
   scene?: Scene;
   geometry?: BufferGeometry;
   material?: ShaderMaterial;
   mesh?: Mesh<BufferGeometry, ShaderMaterial>;
+  trailsGeometry?: BufferGeometry;
+  trailsMaterial?: ShaderMaterial;
+  trailsMesh?: Line<BufferGeometry, ShaderMaterial>;
 }
 
 export class Simulation {
@@ -59,11 +73,12 @@ export class Simulation {
     lineSegments: LineSegments;
     material: Material;
   };
-  _textureDimension: number;
-  _X?: ISubScene; // Positions
+  _X?: IPositionSubScene; // Positions
   _V?: ISubScene; // Velocities
   _P?: DataTexture;
 
+  _numTrailPoints: number;
+  _textureDimension: number;
   _dt: number; // Delta time
   _orbitControls: OrbitControls;
 
@@ -73,24 +88,34 @@ export class Simulation {
     this._createCube();
   }
 
-  setNumBodies(numBodies: 1 | 4 | 16 | 64 | 256 | 1024 | 4096) {
-    const textureDimension = Math.sqrt(numBodies);
-    const newX: ISubScene = {};
+  init(input: {
+    numBodies: 1 | 4 | 16 | 64 | 256 | 1024 | 4096;
+    numTrailPoints: number;
+  }) {
+
+    this._textureDimension = Math.sqrt(input.numBodies);
+    const newX: IPositionSubScene = {};
     const newV: ISubScene = {};
 
-    this._P = this._createRandomProperties(textureDimension);
+    this._numTrailPoints = input.numTrailPoints;
+
+    this._P = this._createRandomProperties(this._textureDimension);
     this._dt = 0.001;
 
-    const positions = this._createRandomPositions(textureDimension);
-    newX.curr = this._createRenderTarget(textureDimension);
-    newX.prev = this._createRenderTarget(textureDimension);
-    this._renderTextureToTarget(positions, newX.curr);
-    this._renderTextureToTarget(positions, newX.prev);
+    const positions = this._createRandomPositions(this._textureDimension);
+    newX.slices = [];
+    for (let i = 0; i < this._numTrailPoints; i++) {
+      newX.slices.push(this._createRenderTarget(this._textureDimension));
+    }
+    // newX.curr = this._createRenderTarget(textureDimension);
+    // newX.prev = this._createRenderTarget(textureDimension);
+    // this._renderTextureToTarget(positions, newX.curr);
+    this._renderTextureToTarget(positions, newX.slices[0]);
     positions.dispose();
 
-    const velocities = this._createRandomVelocities(textureDimension);
-    newV.curr = this._createRenderTarget(textureDimension);
-    newV.prev = this._createRenderTarget(textureDimension);
+    const velocities = this._createRandomVelocities(this._textureDimension);
+    newV.curr = this._createRenderTarget(this._textureDimension);
+    newV.prev = this._createRenderTarget(this._textureDimension);
     this._renderTextureToTarget(velocities, newV.curr);
     this._renderTextureToTarget(velocities, newV.prev);
     velocities.dispose();
@@ -116,7 +141,7 @@ export class Simulation {
         texX: { value: undefined },
         texV: { value: undefined },
         texP: { value: this._P },
-        texDim: { value: textureDimension },
+        texDim: { value: this._textureDimension },
         dt: { value: this._dt },
       },
       vertexShader: passThroughVertexShader,
@@ -132,7 +157,8 @@ export class Simulation {
     // this._disposeMainScene();
     // this._mainScene = {};
     // this._mainScene.scene = new Scene();
-    this._generateBodies(textureDimension);
+    this._generateBodies(this._textureDimension);
+    this._generateTrails();
   }
 
   private _init() {
@@ -334,7 +360,7 @@ export class Simulation {
 
     this._mainScene.material = new ShaderMaterial({
       uniforms: {
-        texX: { value: this._X.curr.texture },
+        texX: { value: undefined },
         texV: { value: this._V.curr.texture },
         texP: { value: this._P },
         texDim: { value: sqrtNumBodies },
@@ -349,6 +375,58 @@ export class Simulation {
     sphere.dispose();
   }
 
+  private _generateTrails() {
+    const numBodies = this._textureDimension * this._textureDimension;
+    this._mainScene.trailsGeometry = new BufferGeometry();
+    const positions = new Float32Array(numBodies * this._numTrailPoints * 3);
+    const trailIndices = new Float32Array(numBodies * this._numTrailPoints);
+    const bodyIndices = new Float32Array(numBodies * this._numTrailPoints);
+    let posIndex = 0;
+    let bodyIndex = 0;
+    for (let i = 0; i < numBodies; i++) {
+      for (let j = 0; j < this._numTrailPoints; j++) {
+        positions[posIndex++] = 0.0;
+        positions[posIndex++] = 0.0;
+        positions[posIndex++] = 0.0;
+        trailIndices[bodyIndex] = j;
+        bodyIndices[bodyIndex++] = i;
+      }
+    }
+
+    const newIndices = new Uint32Array(numBodies * (this._numTrailPoints + 1));
+    let current = 0;
+    for (let i = 0; i < numBodies; i++) {
+      // const offset = i * verts.length / 3;
+      for (let j = 0; j < this._numTrailPoints; j++) {
+        newIndices[current++] = i * this._numTrailPoints + j;
+      }
+      newIndices[current++] = 0xFFFFFFFF;
+    }
+
+    this._mainScene.trailsGeometry.setIndex(new BufferAttribute(newIndices, 1));
+    this._mainScene.trailsGeometry.setAttribute('position', new BufferAttribute(positions, 3));
+    this._mainScene.trailsGeometry.setAttribute('bodyIndex', new BufferAttribute(bodyIndices, 1));
+    this._mainScene.trailsGeometry.setAttribute('trailIndex', new BufferAttribute(trailIndices, 1));
+
+    this._mainScene.trailsMaterial = new ShaderMaterial({
+      uniforms: {
+        texX: { value: undefined },
+        texP: { value: this._P },
+        texDim: { value: this._textureDimension },
+      },
+      defines: {
+        NUM_TRAIL_POINTS: this._numTrailPoints,
+      },
+      // wireframe: true,
+      vertexShader: trailsVertexShader,
+      fragmentShader: trailsFragmentShader,
+    });
+
+    // @ts-ignore
+    this._mainScene.trailsMesh = new Line(this._mainScene.trailsGeometry, this._mainScene.trailsMaterial);
+    this._mainScene.scene.add(this._mainScene.trailsMesh);
+  }
+
   private _update() {
     this._updateForces();
     this._updateVelocities();
@@ -360,7 +438,7 @@ export class Simulation {
   }
 
   private _updateVelocities() {
-    this._V.material.uniforms.texX.value = this._X.curr.texture;
+    this._V.material.uniforms.texX.value = this._X.slices[0].texture;
     this._V.material.uniforms.texV.value = this._V.curr.texture;
     this._renderer.setRenderTarget(this._V.prev);
     this._renderer.render(this._V.scene, this._ptCamera);
@@ -368,17 +446,20 @@ export class Simulation {
   }
 
   private _updatePositions() {
-    this._X.material.uniforms.texX.value = this._X.curr.texture;
+    this._X.slices.unshift(this._X.slices.pop());
+    this._X.material.uniforms.texX.value = this._X.slices[1].texture;
     this._X.material.uniforms.texV.value = this._V.curr.texture;
-    this._renderer.setRenderTarget(this._X.prev);
+    this._renderer.setRenderTarget(this._X.slices[0]);
     this._renderer.render(this._X.scene, this._ptCamera);
-    [this._X.curr, this._X.prev] = [this._X.prev, this._X.curr];
+    // [this._X.curr, this._X.prev] = [this._X.prev, this._X.curr];
   }
 
   private _renderScene() {
-    this._mainScene.material.uniforms.texX.value = this._X.curr.texture;
+    this._mainScene.material.uniforms.texX.value = this._X.slices[0].texture;
     this._mainScene.material.uniforms.texV.value = this._V.curr.texture;
-
+    this._mainScene.trailsMaterial.uniforms.texX.value = this._X.slices.map(slice => slice.texture);
+    this._renderer.setRenderTarget(null);
+    this._renderer.render(this._mainScene.scene, this._mainScene.camera);
   }
 
 
@@ -437,8 +518,7 @@ export class Simulation {
   _loop() {
     this._orbitControls.update();
     this._update();
-    this._renderer.setRenderTarget(null);
-    this._renderer.render(this._mainScene.scene, this._mainScene.camera);
+    this._renderScene();
     requestAnimationFrame(this._loop.bind(this));
   }
 }
