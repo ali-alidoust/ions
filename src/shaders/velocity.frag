@@ -26,25 +26,31 @@ void main() {
       vec3 otherV = texture2D(texV, vec2(i / texDim, j / texDim)).xyz;
       vec3 otherP = texture2D(texP, vec2(i / texDim, j / texDim)).xyz;
       vec3 R = otherX - currX;
-      float R2 = dot(R, R);
       vec3 normR = normalize(R);
       float lenR = length(R);
-      if (lenR >= cutoffDistance) {
-        // Gravitation
-        F += currP.x * otherP.x * normR / R2;
 
-        // Electric force
-        F += -1.0 * currP.y * otherP.y * normR / R2;
-
-        // Magnetic force
-        F += -(0.01 * currP.y * otherP.y / R2) * (cross(currV, (cross(otherV, normR))));
-      } else if (lenR != 0.0) {
-        float cutoffDistance2 = cutoffDistance * cutoffDistance;
-        float ratio = lenR / cutoffDistance;
-        F += mix(vec3(0.0, 0.0, 0.0), currP.x * otherP.x * normR / cutoffDistance2, ratio);
-        F += mix(vec3(0.0, 0.0, 0.0), -1.0 * currP.y * otherP.y * normR / cutoffDistance2, ratio);
-        F += mix(vec3(0.0, 0.0, 0.0), -(0.01 * currP.y * otherP.y / cutoffDistance2) * (cross(currV, (cross(otherV, normR)))), ratio);
+      if (lenR == 0.0) {
+        continue;
       }
+
+      float R2 = lenR < cutoffDistance ? cutoffDistance * cutoffDistance : dot(R, R);
+      vec3 pairwiseF = vec3(0.0, 0.0, 0.0);
+      
+      // Gravitation
+      pairwiseF += currP.x * otherP.x * normR / R2;
+
+      // Electric force
+      pairwiseF += -1.0 * currP.y * otherP.y * normR / R2;
+
+      // Magnetic force
+      pairwiseF += (0.01 * currP.y * otherP.y / R2) * (cross(currV, (cross(otherV, normR))));
+
+      if (lenR < cutoffDistance) {
+        float ratio = lenR / cutoffDistance;
+        pairwiseF = mix(vec3(0.0, 0.0, 0.0), pairwiseF, ratio);
+      }
+
+      F += pairwiseF;
     }
   }
 
