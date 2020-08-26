@@ -40,15 +40,15 @@ void main() {
 
       float R2 = lenR < cutoffDistance ? cutoffDistance * cutoffDistance : dot(R, R);
       vec3 pairwiseF = vec3(0.0, 0.0, 0.0);
-      
+
       // Gravitation
       pairwiseF += gravitationalConstant * currP.x * otherP.x * normR / R2;
 
       // Electric force
-      pairwiseF += electricConstant * -1.0 * currP.y * otherP.y * normR / R2;
+      pairwiseF += -electricConstant * currP.y * otherP.y * normR / R2;
 
       // Magnetic force
-      pairwiseF += magneticConstant * (0.01 * currP.y * otherP.y / R2) * (cross(currV, (cross(otherV, normR))));
+      pairwiseF += magneticConstant * (currP.y * otherP.y / R2) * (cross(currV, (cross(otherV, normR))));
 
       if (lenR < cutoffDistance) {
         float ratio = lenR / cutoffDistance;
