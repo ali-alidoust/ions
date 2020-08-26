@@ -21,10 +21,12 @@ void main() {
   vec3 F = vec3(0.0, 0.0, 0.0);
 
   for (float i = 0.0; i < texDim; i++) {
+    float other_i = i / texDim;
     for (float j = 0.0; j < texDim; j++) {
-      vec3 otherX = texture2D(texX, vec2(i / texDim, j / texDim)).xyz;
-      vec3 otherV = texture2D(texV, vec2(i / texDim, j / texDim)).xyz;
-      vec3 otherP = texture2D(texP, vec2(i / texDim, j / texDim)).xyz;
+      float other_j = j / texDim;
+      vec3 otherX = texture2D(texX, vec2(other_i, other_j)).xyz;
+      vec3 otherV = texture2D(texV, vec2(other_i, other_j)).xyz;
+      vec3 otherP = texture2D(texP, vec2(other_i, other_j)).xyz;
       vec3 R = otherX - currX;
       vec3 normR = normalize(R);
       float lenR = length(R);

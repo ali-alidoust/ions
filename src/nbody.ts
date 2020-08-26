@@ -19,8 +19,8 @@ import {
   LineSegments,
   LineBasicMaterial,
   UVMapping,
-  Line,
-  Points
+  InstancedBufferAttribute,
+  InstancedMesh
 } from 'three';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
@@ -33,6 +33,7 @@ import passThroughVertexShader from './shaders/pass-through.vert';
 import passThroughFragmentShader from './shaders/pass-through.frag';
 import positionFragmentShader from './shaders/position.frag';
 import velocityFragmentShader from './shaders/velocity.frag';
+import { InstancedLine } from './instanced-line';
 
 interface ISubScene {
   scene?: Scene;
@@ -54,10 +55,10 @@ interface IMainScene {
   scene?: Scene;
   geometry?: BufferGeometry;
   material?: ShaderMaterial;
-  mesh?: Mesh<BufferGeometry, ShaderMaterial>;
+  mesh?: InstancedMesh<BufferGeometry, ShaderMaterial>;
   trailsGeometry?: BufferGeometry;
   trailsMaterial?: ShaderMaterial;
-  trailsMesh?: Line<BufferGeometry, ShaderMaterial>;
+  trailsMesh?: InstancedLine<BufferGeometry, ShaderMaterial>;
 }
 
 export class Simulation {
@@ -327,36 +328,15 @@ export class Simulation {
 
   private _generateBodies(sqrtNumBodies: number) {
     const numBodies = sqrtNumBodies * sqrtNumBodies;
-    this._mainScene.geometry = new BufferGeometry();
-    const sphere = new SphereBufferGeometry(0.001);
-    const verts = sphere.getAttribute('position').array;
-    const positions = new Float32Array(numBodies * verts.length);
-    const bodyIndices = new Float32Array(numBodies * verts.length / 3);
-    let posIndex = 0;
-    let bodyIndex = 0;
-    for (let i = 0; i < numBodies; i++) {
-      for (let j = 0; j < verts.length; j += 3) {
-        positions[posIndex++] = verts[j];
-        positions[posIndex++] = verts[j + 1];
-        positions[posIndex++] = verts[j + 2];
+    this._mainScene.geometry?.dispose();
+    this._mainScene.geometry = new SphereBufferGeometry(0.001);
 
-        bodyIndices[bodyIndex++] = i;
-      }
+    const bodyIndices = new Float32Array(numBodies);
+    for (let i = 0; i < numBodies; i++) {
+      bodyIndices[i] = i;
     }
 
-    let current = 0;
-    const sphereIndices = sphere.getIndex().array;
-    const newIndices = new Uint32Array(numBodies * sphereIndices.length);
-    for (let i = 0; i < numBodies; i++) {
-      const offset = i * verts.length / 3;
-      for (let j = 0; j < sphereIndices.length; j++) {
-        newIndices[current++] = offset + sphereIndices[j];
-      }
-    }
-
-    this._mainScene.geometry.setIndex(new BufferAttribute(newIndices, 1));
-    this._mainScene.geometry.setAttribute('position', new BufferAttribute(positions, 3));
-    this._mainScene.geometry.setAttribute('bodyIndex', new BufferAttribute(bodyIndices, 1));
+    this._mainScene.geometry.setAttribute('bodyIndex', new InstancedBufferAttribute(bodyIndices, 1));
 
     this._mainScene.material = new ShaderMaterial({
       uniforms: {
@@ -369,44 +349,31 @@ export class Simulation {
       fragmentShader: mainFragmentShader,
     });
 
-    this._mainScene.mesh = new Mesh(this._mainScene.geometry, this._mainScene.material);
+    this._mainScene.mesh = new InstancedMesh(this._mainScene.geometry, this._mainScene.material, numBodies);
     this._mainScene.scene.add(this._mainScene.mesh);
-
-    sphere.dispose();
   }
 
   private _generateTrails() {
     const numBodies = this._textureDimension * this._textureDimension;
     this._mainScene.trailsGeometry = new BufferGeometry();
-    const positions = new Float32Array(numBodies * this._numTrailPoints * 3);
-    const trailIndices = new Float32Array(numBodies * this._numTrailPoints);
-    const bodyIndices = new Float32Array(numBodies * this._numTrailPoints);
-    let posIndex = 0;
-    let bodyIndex = 0;
-    for (let i = 0; i < numBodies; i++) {
-      for (let j = 0; j < this._numTrailPoints; j++) {
-        positions[posIndex++] = 0.0;
-        positions[posIndex++] = 0.0;
-        positions[posIndex++] = 0.0;
-        trailIndices[bodyIndex] = j;
-        bodyIndices[bodyIndex++] = i;
-      }
+    const positions = new Float32Array(this._numTrailPoints * 3);
+    const trailIndices = new Float32Array(this._numTrailPoints);
+    const bodyIndices = new Float32Array(numBodies);
+
+    for (let i = 0; i < this._numTrailPoints; i++) {
+      positions[i * 3 + 0] = 0.0;
+      positions[i * 3 + 1] = 0.0;
+      positions[i * 3 + 2] = 0.0;
+      trailIndices[i] = i;
     }
 
-    const newIndices = new Uint32Array(numBodies * (this._numTrailPoints + 1));
-    let current = 0;
     for (let i = 0; i < numBodies; i++) {
-      // const offset = i * verts.length / 3;
-      for (let j = 0; j < this._numTrailPoints; j++) {
-        newIndices[current++] = i * this._numTrailPoints + j;
-      }
-      newIndices[current++] = 0xFFFFFFFF;
+      bodyIndices[i] = i;
     }
 
-    this._mainScene.trailsGeometry.setIndex(new BufferAttribute(newIndices, 1));
     this._mainScene.trailsGeometry.setAttribute('position', new BufferAttribute(positions, 3));
-    this._mainScene.trailsGeometry.setAttribute('bodyIndex', new BufferAttribute(bodyIndices, 1));
     this._mainScene.trailsGeometry.setAttribute('trailIndex', new BufferAttribute(trailIndices, 1));
+    this._mainScene.trailsGeometry.setAttribute('bodyIndex', new InstancedBufferAttribute(bodyIndices, 1));
 
     this._mainScene.trailsMaterial = new ShaderMaterial({
       uniforms: {
@@ -422,8 +389,7 @@ export class Simulation {
       fragmentShader: trailsFragmentShader,
     });
 
-    // @ts-ignore
-    this._mainScene.trailsMesh = new Line(this._mainScene.trailsGeometry, this._mainScene.trailsMaterial);
+    this._mainScene.trailsMesh = new InstancedLine(this._mainScene.trailsGeometry, this._mainScene.trailsMaterial, numBodies);
     this._mainScene.scene.add(this._mainScene.trailsMesh);
   }
 

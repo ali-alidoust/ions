@@ -4,7 +4,7 @@ import { Simulation } from './nbody';
 const simulation = new Simulation();
 simulation.init({
   // @ts-ignore
-  numBodies: 128 * 128,
-  numTrailPoints: 16,
+  numBodies: 32 * 32,
+  numTrailPoints: 15,
 });
 simulation.startLoop();
