@@ -5,6 +5,9 @@ uniform sampler2D texV;
 uniform sampler2D texP;
 uniform float texDim;
 uniform float dt;
+uniform float gravitationalConstant;
+uniform float electricConstant;
+uniform float magneticConstant;
 // uniform float minX;
 // uniform float minY;
 // uniform float minZ;
@@ -39,13 +42,13 @@ void main() {
       vec3 pairwiseF = vec3(0.0, 0.0, 0.0);
       
       // Gravitation
-      pairwiseF += currP.x * otherP.x * normR / R2;
+      pairwiseF += gravitationalConstant * currP.x * otherP.x * normR / R2;
 
       // Electric force
-      pairwiseF += -1.0 * currP.y * otherP.y * normR / R2;
+      pairwiseF += electricConstant * -1.0 * currP.y * otherP.y * normR / R2;
 
       // Magnetic force
-      pairwiseF += (0.01 * currP.y * otherP.y / R2) * (cross(currV, (cross(otherV, normR))));
+      pairwiseF += magneticConstant * (0.01 * currP.y * otherP.y / R2) * (cross(currV, (cross(otherV, normR))));
 
       if (lenR < cutoffDistance) {
         float ratio = lenR / cutoffDistance;
@@ -56,7 +59,7 @@ void main() {
     }
   }
 
-  vec3 newV = currV + (F / currP.x * 0.00000001);
+  vec3 newV = currV + (F / currP.x * dt);
   vec3 newPos = currX + newV * dt;
 
   if (newPos.x <= -0.5 || newPos.x >= 0.5) {

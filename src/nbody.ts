@@ -61,6 +61,13 @@ interface IMainScene {
   trailsMesh?: InstancedLine<BufferGeometry, ShaderMaterial>;
 }
 
+interface IConstants {
+  dt: number; // Time scale
+  electricConstant: number;
+  magneticConstant: number;
+  gravitationalConstant: number;
+}
+
 export class Simulation {
   _ptScene: Scene;
   _ptMaterial: ShaderMaterial;
@@ -80,7 +87,9 @@ export class Simulation {
 
   _numTrailPoints: number;
   _textureDimension: number;
-  _dt: number; // Delta time
+
+  _constants?: IConstants
+
   _orbitControls: OrbitControls;
 
 
@@ -92,7 +101,13 @@ export class Simulation {
   init(input: {
     numBodies: 1 | 4 | 16 | 64 | 256 | 1024 | 4096;
     numTrailPoints: number;
-  }) {
+  } & IConstants) {
+    this._constants = {
+      dt: input.dt,
+      gravitationalConstant: input.gravitationalConstant,
+      electricConstant: input.electricConstant,
+      magneticConstant: input.magneticConstant,
+    };
 
     this._textureDimension = Math.sqrt(input.numBodies);
     const newX: IPositionSubScene = {};
@@ -101,7 +116,6 @@ export class Simulation {
     this._numTrailPoints = input.numTrailPoints;
 
     this._P = this._createRandomProperties(this._textureDimension);
-    this._dt = 0.001;
 
     const positions = this._createRandomPositions(this._textureDimension);
     newX.slices = [];
@@ -125,7 +139,7 @@ export class Simulation {
       uniforms: {
         texX: { value: undefined },
         texV: { value: undefined },
-        dt: { value: this._dt },
+        dt: { value: this._constants.dt },
       },
       vertexShader: passThroughVertexShader,
       fragmentShader: positionFragmentShader,
@@ -143,7 +157,10 @@ export class Simulation {
         texV: { value: undefined },
         texP: { value: this._P },
         texDim: { value: this._textureDimension },
-        dt: { value: this._dt },
+        dt: { value: this._constants.dt },
+        gravitationalConstant: { value: this._constants.gravitationalConstant },
+        electricConstant: { value: this._constants.electricConstant },
+        magneticConstant: { value: this._constants.magneticConstant },
       },
       vertexShader: passThroughVertexShader,
       fragmentShader: velocityFragmentShader,
@@ -249,6 +266,8 @@ export class Simulation {
     const numBodies = textureDimension * textureDimension;
     const data = new Float32Array(numBodies * 4);
 
+
+    const proton = Math.random() > 0.5;
     for (let i = 0; i < numBodies * 4; i += 4) {
       // Mass
       data[i + 0] = 0.0001; // Math.random();
