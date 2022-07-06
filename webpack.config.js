@@ -6,8 +6,11 @@ module.exports = {
   entry: './src/index.ts',
   devtool: 'inline-source-map',
   devServer: {
-    contentBase: path.join(__dirname, 'dist'),
-    index: 'index.html',
+    static: {
+      directory: path.join(__dirname, 'dist'),
+    },
+    // contentBase: path.join(__dirname, 'dist'),
+    // index: 'index.html',
     compress: true,
     port: 9000
   },

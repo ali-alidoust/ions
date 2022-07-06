@@ -249,7 +249,7 @@ export class Simulation {
   }
 
   private _disposeSubScene(subScene?: ISubScene) {
-    subScene?.scene?.dispose();
+    // subScene?.scene?.dispose()
     subScene?.material?.dispose();
     subScene?.curr?.dispose();
     subScene?.prev?.dispose();
