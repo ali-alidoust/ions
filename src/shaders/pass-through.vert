@@ -1,5 +1,5 @@
 precision highp float;
-varying vec2 vUv;
+out vec2 vUv;
 
 void main() {
   vUv = uv;
